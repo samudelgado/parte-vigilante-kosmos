@@ -22,6 +22,7 @@ label{font-size:12px;font-weight:700;display:block;margin:8px 0 4px}
 input,select,textarea{width:100%;padding:11px 10px;border:1.5px solid #CBD5E1;border-radius:10px;font-size:15px;background:#fff;color:#003B75}
 textarea{min-height:70px;resize:vertical}
 .grid2{display:grid;grid-template-columns:1fr;gap:10px}
+#vista-form input:not([type=checkbox]),#vista-form select{height:44px}
 .vig{display:grid;grid-template-columns:26px 1fr 100px;gap:8px;align-items:center;margin-bottom:8px}
 .vig .d{font-weight:800;text-align:center} .vig .tip-lab{font-size:11px;font-weight:800;text-align:center}
 table{width:100%;border-collapse:collapse} th{background:#FFF9A8;font-size:12px;padding:8px;border:1px solid #003B75}
@@ -78,6 +79,7 @@ td select{border:0;width:100%;padding:10px 8px;font-size:15px;background:#fff;co
 /* ---- Impresión: igual que el parte en papel ---- */
 #print-area{display:none}
 @page{margin:10mm 10mm}
+@page{size:A4}
 @media print{
  body{background:#fff;padding:0} header,nav,main,#toast,#splash,.no-print{display:none!important}
  #print-area{display:block!important;color:#000;font-size:11px}
@@ -96,7 +98,7 @@ td select{border:0;width:100%;padding:10px 8px;font-size:15px;background:#fff;co
  .p-firmas{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;text-align:center}
  .p-firmas .f{width:30%} .p-firmas img{height:44px;max-width:150px}
  .p-pie{font-size:7.5px;margin-top:10px;color:#003B75}
- .p-salto{page-break-after:always} .p-salto:last-child{page-break-after:auto}
+ .p-salto{page-break-after:always} .p-salto:last-child{page-break-after:auto} .p-salto{page-break-inside:avoid}
  .p-anulado{border:2px solid #B91C1C;color:#B91C1C;text-align:center;font-weight:800;padding:6px;margin-bottom:8px;letter-spacing:1px}
  .p-sec-tit{background:#FFF9A8;border:1px solid #003B75;border-top:0;text-align:center;font-weight:700;padding:6px;font-size:11px}
  .p-meta{font-size:9px;color:#444;margin-top:6px}
@@ -416,9 +418,23 @@ function htmlImpresion(p){
  '</div><div class="p-pie">Kosmos Seguridad Sur S.L. · Tel. 900 877 305 · seguridadkosmos.es · Empresa de seguridad inscrita en el Registro de Empresas de Seguridad de la Dirección General de la Policía con el n.º 4627 · C/ Pablo Iglesias 1, Torremolinos (Málaga)</div>';
 }
 
-function imprimirParte(id){ var p=partes.find(function(x){return x.id===id}); if(!p)return; document.getElementById("print-area").innerHTML=htmlImpresion(p); imprimir(); }
-function imprimirActual(){ document.getElementById("print-area").innerHTML=htmlImpresion(leerForm()); imprimir(); }
-function imprimir(){ if(window.AndroidApp && AndroidApp.imprimir){AndroidApp.imprimir()} else {window.print()} }
+function imprimirParte(id){ var p=partes.find(function(x){return x.id===id}); if(!p)return; document.getElementById("print-area").innerHTML='<div class="p-salto">'+htmlImpresion(p)+'</div>'; imprimir(); }
+function imprimirActual(){ document.getElementById("print-area").innerHTML='<div class="p-salto">'+htmlImpresion(leerForm())+'</div>'; imprimir(); }
+function ajustarUnaPagina(){
+ var area=document.getElementById("print-area");
+ var bloques=area.querySelectorAll(".p-salto");
+ if(!bloques.length) return;
+ var prev=area.getAttribute("style");
+ area.style.cssText="display:block;position:absolute;left:-10000px;top:0;width:700px;visibility:hidden";
+ var maxH=1000;
+ bloques.forEach(function(b){
+   b.style.zoom="";
+   var hgt=b.scrollHeight||b.offsetHeight||0;
+   if(hgt>maxH){ b.style.zoom=String(maxH/hgt); }
+ });
+ if(prev===null) area.removeAttribute("style"); else area.setAttribute("style",prev);
+}
+function imprimir(){ajustarUnaPagina(); if(window.AndroidApp && AndroidApp.imprimir){AndroidApp.imprimir()} else {window.print()} }
 function compartirParte(p){
  var nombre="parte-kosmos-"+(p.fecha||hoy())+"-"+(p.numero||p.id)+".json";
  var blob=new Blob([JSON.stringify({app:"parte-vigilante-kosmos",version:3,parte:p},null,2)],{type:"application/json"});
