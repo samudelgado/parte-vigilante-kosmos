@@ -429,10 +429,20 @@ function pdfLineas(doc,txt,ancho,fs){
   var ls=doc.splitTextToSize(String(txt==null?"":txt),ancho);
   return ls.length?ls:[""];
 }
-function pdfAltoFila(doc,celdas,anchos,fs,s){
+function pdfAltoFila(doc,celdas,anchos,fs,s,ajustes){
   var maxL=1;
-  for(var i=0;i<celdas.length;i++){ var n=pdfLineas(doc,celdas[i],anchos[i],fs).length; if(n>maxL)maxL=n; }
-  return Math.max(7*s,maxL*4.5*s+2*s);
+  for(var i=0;i<celdas.length;i++){
+    if(ajustes&&ajustes[i]) continue;
+    var n=pdfLineas(doc,celdas[i],anchos[i],fs).length; if(n>maxL)maxL=n;
+  }
+  return Math.max(7*s,maxL*4.5*s+2.5*s);
+}
+function pdfFitFuente(doc,txt,ancho,fs,minFs,bold){
+  doc.setFont("helvetica",bold?"bold":"normal"); doc.setFontSize(fs);
+  var w=doc.getTextWidth(String(txt==null?"":txt));
+  if(w<=ancho||w===0) return fs;
+  var f=fs*ancho/w;
+  return Math.max(minFs,f);
 }
 function pdfSisTxt(p){
   var s=p.sistemas||{};
@@ -449,12 +459,12 @@ function pdfSecciones(p){
   var secs=[];
   var novFilas=[]; var nNov=Math.max((p.lineas||[]).length,12);
   for(var j=0;j<nNov;j++){var l=(p.lineas||[])[j]||{};novFilas.push([l.hora||"",l.texto||""]);}
-  secs.push({titulo:null,headers:["Hora","NOVEDADES"],cols:[{w:24,a:"c"},{w:166,a:"l"}],filas:novFilas});
+  secs.push({titulo:null,headers:["Hora","NOVEDADES"],cols:[{w:24,a:"c",fit:true},{w:166,a:"l"}],filas:novFilas});
   if((p.comunicaciones||[]).length){
-    secs.push({titulo:"COMUNICACIONES REALIZADAS",headers:["Hora","Destinatario","Contenido"],cols:[{w:24,a:"c"},{w:35,a:"l"},{w:131,a:"l"}],filas:(p.comunicaciones||[]).map(function(c){return [c.hora||"",c.destino||"",c.texto||""]})});
+    secs.push({titulo:"COMUNICACIONES REALIZADAS",headers:["Hora","Destinatario","Contenido"],cols:[{w:24,a:"c",fit:true},{w:35,a:"l"},{w:131,a:"l"}],filas:(p.comunicaciones||[]).map(function(c){return [c.hora||"",c.destino||"",c.texto||""]})});
   }
   if((p.material||[]).length){
-    secs.push({titulo:"ARMAS, LLAVES Y MATERIAL",headers:null,cols:[{w:24,a:"c"},{w:166,a:"l"}],filas:(p.material||[]).map(function(m){return [m.hora||"",m.texto||""]})});
+    secs.push({titulo:"ARMAS, LLAVES Y MATERIAL",headers:null,cols:[{w:24,a:"c",fit:true},{w:166,a:"l"}],filas:(p.material||[]).map(function(m){return [m.hora||"",m.texto||""]})});
   }
   if(pdfHaySis(p)){
     secs.push({titulo:"COMPROBACIÓN DE SISTEMAS",headers:null,cols:[{w:190,a:"l"}],filas:[[pdfSisTxt(p)]]});
@@ -468,9 +478,9 @@ function pdfAltosCab(doc,p,fs,s){
   var izqVals=[p.fecha,p.turno,((p.horaIni||"")+((p.horaIni&&p.horaFin)?" - ":"")+(p.horaFin||"")),p.contrato,p.cliente,p.dependencia];
   var altos=[];
   for(var i=0;i<6;i++){
-    var hL=pdfAltoFila(doc,[izqVals[i]],[31],fs,s);
+    var hL=(i<4)?7*s:pdfAltoFila(doc,[izqVals[i]],[31],fs,s);
     var hR=7*s;
-    if(i>=1&&i<=4){var nm=(p.vigilantes||[])[i-1]||"",tp=(p.tips||[])[i-1]||"";hR=pdfAltoFila(doc,[nm,tp],[88,11],fs,s);}
+    if(i>=1&&i<=4){var nm=(p.vigilantes||[])[i-1]||"";hR=pdfAltoFila(doc,[nm],[88],fs,s);}
     altos.push(Math.max(hL,hR));
   }
   return altos;
@@ -486,7 +496,8 @@ function pdfMedir(doc,p){
     if(sec.titulo) H+=7;
     if(sec.headers) H+=7;
     var anchos=sec.cols.map(function(c){return c.w-4});
-    sec.filas.forEach(function(f){ H+=pdfAltoFila(doc,f,anchos,9,1); });
+    var ajustes=sec.cols.map(function(c){return !!c.fit});
+    sec.filas.forEach(function(f){ H+=pdfAltoFila(doc,f,anchos,9,1,ajustes); });
   });
   H+=2+21;
   var metaL=pdfLineas(doc,pdfMetaTxt(p),186,8).length;
@@ -508,6 +519,8 @@ function pdfDibujar(doc,p,s){
   try{var lg=pdfLogoURL(); if(lg) doc.addImage(lg,"PNG",12,12,lw,lw);}catch(e){}
   doc.setFont("helvetica","bold"); doc.setFontSize(11*s); doc.setTextColor(0,0,0);
   var numTxt="N.º "+(p.numero||"");
+  var fN=pdfFitFuente(doc,numTxt,70,11*s,5*s,true);
+  doc.setFont("helvetica","bold"); doc.setFontSize(fN);
   doc.text(numTxt,198,12+5*s,{align:"right"});
   var tw=doc.getTextWidth(numTxt);
   doc.setDrawColor(0,0,0); doc.setLineWidth(0.3); doc.line(198-tw,12+6.5*s,198,12+6.5*s);
@@ -539,7 +552,13 @@ function pdfDibujar(doc,p,s){
     doc.line(x0+24,yy,x0+24,yy+hh);
     doc.setFont("helvetica","normal"); doc.setFontSize(fs); doc.setTextColor(0,0,0);
     doc.text(izqLabs[i],x0+2,yy+hh/2+0.247*fs);
-    pdfBloque(doc,pdfLineas(doc,izqVals[i]||"",31,fs),x0+26,yy,hh,fs,lh);
+    if(i<4){
+      var fV=pdfFitFuente(doc,izqVals[i]||"",31,fs,5*s,false);
+      doc.setFont("helvetica","normal"); doc.setFontSize(fV);
+      doc.text(String(izqVals[i]||""),x0+26,yy+hh/2+0.247*fV);
+    } else {
+      pdfBloque(doc,pdfLineas(doc,izqVals[i]||"",31,fs),x0+26,yy,hh,fs,lh);
+    }
     yy+=hh;
   }
   yy=cabY;
@@ -556,7 +575,9 @@ function pdfDibujar(doc,p,s){
     var nm=(p.vigilantes||[])[i2-1]||"", tp=(p.tips||[])[i2-1]||"";
     pdfBloque(doc,pdfLineas(doc,nm,88,fs),82,yy,hh2,fs,lh);
     doc.text("TIP",176,yy+hh2/2+0.247*fs);
-    pdfBloque(doc,pdfLineas(doc,tp,11,fs),187,yy,hh2,fs,lh);
+    var fT=pdfFitFuente(doc,tp,11,fs,5*s,false);
+    doc.setFont("helvetica","normal"); doc.setFontSize(fT);
+    doc.text(String(tp||""),187,yy+hh2/2+0.247*fT);
     yy+=hh2;
   }
   doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(72,yy,128,cabA[5],"FD");
@@ -584,11 +605,19 @@ function pdfDibujar(doc,p,s){
     }
     sec.filas.forEach(function(f){
       var anchos=sec.cols.map(function(c){return c.w-4*s});
-      var rh=pdfAltoFila(doc,f,anchos,fs,s);
+      var ajustes=sec.cols.map(function(c){return !!c.fit});
+      var rh=pdfAltoFila(doc,f,anchos,fs,s,ajustes);
       var xx2=x0;
       doc.setFillColor(255,255,255);
       sec.cols.forEach(function(c,ci){
         doc.setFillColor(255,255,255); doc.rect(xx2,y,c.w,rh,"FD");
+        if(c.fit){
+          var fF=pdfFitFuente(doc,f[ci]||"",anchos[ci],fs,5*s,false);
+          doc.setFont("helvetica","normal"); doc.setFontSize(fF);
+          doc.text(String(f[ci]||""),xx2+c.w/2,y+rh/2+0.247*fF,{align:"center"});
+          xx2+=c.w;
+          return;
+        }
         doc.setFont("helvetica","normal"); doc.setFontSize(fs);
         var ls=pdfLineas(doc,f[ci]||"",anchos[ci],fs);
         if(c.a==="c"){
@@ -618,7 +647,8 @@ function pdfDibujar(doc,p,s){
         doc.addImage(data,"PNG",cx-wI/2,y+imgH-hI,wI,hI);
       }catch(e){}
     }
-    doc.setFont("helvetica","bold"); doc.setFontSize(fs); doc.setTextColor(0,0,0);
+    var fL=pdfFitFuente(doc,fm[1],colW-6,fs,5*s,true);
+    doc.setFont("helvetica","bold"); doc.setFontSize(fL); doc.setTextColor(0,0,0);
     doc.text(fm[1],cx,y+imgH+4.5*s,{align:"center"});
     if(sf[fm[0]]){
       doc.setFont("helvetica","normal"); doc.setFontSize(7*s); doc.setTextColor(GR[0],GR[1],GR[2]);
