@@ -78,11 +78,11 @@ td select{border:0;width:100%;padding:10px 8px;font-size:15px;background:#fff;co
 .cal-dia small{font-size:11px;font-weight:800;color:#003B75}
 /* ---- Impresión: igual que el parte en papel ---- */
 #print-area{display:none}
-@page{margin:10mm 10mm}
+@page{margin:0}
 @page{size:A4}
 @media print{
  body{background:#fff;padding:0} header,nav,main,#toast,#splash,.no-print{display:none!important}
- #print-area{display:block!important;color:#000;font-size:11px}
+ #print-area{display:block!important;color:#000;font-size:11px;padding:10mm}
  .p-borde{border:1.5px solid #003B75;padding:8px 10px 10px}
  .p-top{display:flex;justify-content:space-between;align-items:flex-start}
  .p-top img{width:80px;background:#fff} .p-num{font-size:12px;border-bottom:1px solid #000;padding-bottom:2px}
@@ -429,9 +429,19 @@ function ajustarUnaPagina(){
  area.style.cssText="display:block;position:absolute;left:-10000px;top:0;width:700px;visibility:hidden";
  var maxH=1000;
  bloques.forEach(function(b){
-   b.style.zoom="";
    var hgt=b.scrollHeight||b.offsetHeight||0;
-   if(hgt>maxH){ b.style.zoom=String(maxH/hgt); }
+   if(hgt>maxH){
+     var e=maxH/hgt;
+     var w=document.createElement("div");
+     w.className="p-salto";
+     w.style.height=(hgt*e)+"px";
+     w.style.overflow="hidden";
+     b.classList.remove("p-salto");
+     b.parentNode.insertBefore(w,b);
+     w.appendChild(b);
+     b.style.transform="scale("+e+")";
+     b.style.transformOrigin="top left";
+   }
  });
  if(prev===null) area.removeAttribute("style"); else area.setAttribute("style",prev);
 }
