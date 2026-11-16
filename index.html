@@ -167,7 +167,7 @@ td select{border:0;width:100%;padding:10px 8px;font-size:15px;background:#fff;co
 <div class="sig-box"><div class="sig-row"><label>Fdo. Cliente</label><button type="button" onclick="limpiarFirma('cli')">Limpiar</button></div><canvas id="sig-cli"></canvas><div class="sig-hint">Firma aquí con el dedo</div></div>
 <div class="sig-box"><div class="sig-row"><label>Fdo. Jefe de Servicios</label><button type="button" onclick="limpiarFirma('jefe')">Limpiar</button></div><canvas id="sig-jefe"></canvas><div class="sig-hint">Firma aquí con el dedo</div></div>
 <button class="big pri" onclick="guardar()">Guardar parte</button>
-<button class="big sec" onclick="imprimirActual()">Imprimir / Guardar PDF</button>
+<button class="big sec" onclick="guardarPDFActual()">Guardar PDF</button>
 <button class="big sec" onclick="enviarActual()">Enviar a la empresa</button>
 <button class="big ghost" onclick="nuevoParte()">Nuevo parte en blanco</button>
 <button class="big ghost" onclick="exportar()">Exportar copia (JSON)</button>
@@ -185,7 +185,7 @@ td select{border:0;width:100%;padding:10px 8px;font-size:15px;background:#fff;co
 <div class="cal-nav"><button type="button" onclick="calCambiar(-1)">‹</button><b id="cal-titulo"></b><button type="button" onclick="calCambiar(1)">›</button></div>
 <div class="cal-grid" id="cal-grid"></div>
 <p class="mini">Toca un día para abrir su parte. Los días amarillos tienen parte. Si el día no tiene parte, se empieza uno nuevo con esa fecha.</p>
-<button class="big pri" onclick="imprimirMes()">Sacar todos los partes de este mes</button>
+<button class="big pri" onclick="guardarPDFMes()">Sacar todos los partes de este mes en PDF</button>
 </div>
 <div id="cal-dia"></div>
 </main>
@@ -193,6 +193,7 @@ td select{border:0;width:100%;padding:10px 8px;font-size:15px;background:#fff;co
 <div id="print-area"></div>
 <div id="toast"></div>
 
+<script src="jspdf.min.js"></script>
 <script>
 var KEY="parte_kosmos_v1";
 var partes=[]; try{partes=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){partes=[]}
@@ -369,7 +370,7 @@ function renderLista(){
    if(p.estado==="anulado") badges+='<span class="badge anulado">ANULADO</span>';
    if(p.rectificado) badges+='<span class="badge rectif">Rectificado ×'+p.rectificado+'</span>';
    if(p.entregado) badges+='<span class="badge entregado">Entregado</span>';
-   return '<div class="card parte-card'+(p.estado==="anulado"?" anulado":"")+'"><b>'+esc(p.fecha||"")+' · '+(esc(p.cliente||"Sin cliente"))+'</b>'+badges+'<div class="mini">'+esc(p.dependencia||"")+' · '+esc(p.turno||"")+(p.numero?' · N.º '+esc(p.numero):"")+' · '+(p.lineas||[]).length+' líneas'+(p.control?' · Control '+esc(p.control):"")+'</div><div class="acciones"><button onclick="abrir(\''+p.id+'\')">Abrir / Editar</button><button onclick="imprimirParte(\''+p.id+'\')">Imprimir / PDF</button><button onclick="enviarParte(\''+p.id+'\')">Enviar a la empresa</button><button class="del" onclick="anular(\''+p.id+'\')">Anular</button></div></div>';
+   return '<div class="card parte-card'+(p.estado==="anulado"?" anulado":"")+'"><b>'+esc(p.fecha||"")+' · '+(esc(p.cliente||"Sin cliente"))+'</b>'+badges+'<div class="mini">'+esc(p.dependencia||"")+' · '+esc(p.turno||"")+(p.numero?' · N.º '+esc(p.numero):"")+' · '+(p.lineas||[]).length+' líneas'+(p.control?' · Control '+esc(p.control):"")+'</div><div class="acciones"><button onclick="abrir(\''+p.id+'\')">Abrir / Editar</button><button onclick="guardarPDFParte(\''+p.id+'\')">PDF</button><button onclick="enviarParte(\''+p.id+'\')">Enviar a la empresa</button><button class="del" onclick="anular(\''+p.id+'\')">Anular</button></div></div>';
  }).join("");
 }
 
@@ -417,6 +418,271 @@ function htmlImpresion(p){
  '<div class="p-firmas"><div class="f">'+firmaImg(sg.vig)+firmaFecha(sf.vig)+'<div>Fdo. VIGILANTE</div></div><div class="f">'+firmaImg(sg.cli)+firmaFecha(sf.cli)+'<div>Fdo. CLIENTE</div></div><div class="f">'+firmaImg(sg.jefe)+firmaFecha(sf.jefe)+'<div>Fdo. JEFE DE SERVICIOS</div></div></div>'+
  meta+
  '</div><div class="p-pie">Kosmos Seguridad Sur S.L. · Tel. 900 877 305 · seguridadkosmos.es · Empresa de seguridad inscrita en el Registro de Empresas de Seguridad de la Dirección General de la Policía con el n.º 4627 · C/ Pablo Iglesias 1, Torremolinos (Málaga)</div>';
+}
+
+
+// ---- PDF real con jsPDF: el PDF lo genera la app, sin pasar por la impresión del navegador ----
+function pdfTieneLib(){ return !!(window.jspdf && window.jspdf.jsPDF); }
+function pdfLogoURL(){ var im=document.querySelector("header img.logo"); return im?im.src:""; }
+function pdfLineas(doc,txt,ancho,fs){
+  doc.setFont("helvetica","normal"); doc.setFontSize(fs);
+  var ls=doc.splitTextToSize(String(txt==null?"":txt),ancho);
+  return ls.length?ls:[""];
+}
+function pdfAltoFila(doc,celdas,anchos,fs,s){
+  var maxL=1;
+  for(var i=0;i<celdas.length;i++){ var n=pdfLineas(doc,celdas[i],anchos[i],fs).length; if(n>maxL)maxL=n; }
+  return Math.max(7*s,maxL*4.5*s+2*s);
+}
+function pdfSisTxt(p){
+  var s=p.sistemas||{};
+  return "CCTV: "+(s.cctv?"OK":"—")+" · Alarma: "+(s.alarma?"OK":"—")+" · Iluminación: "+(s.ilum?"OK":"—")+" · Accesos: "+(s.accesos?"OK":"—")+" · Comunicaciones: "+(s.coms?"OK":"—")+((s.anomalias)?" · Anomalías: "+s.anomalias:"");
+}
+function pdfHaySis(p){
+  var s=p.sistemas||{};
+  return !!(s.cctv||s.alarma||s.ilum||s.accesos||s.coms||((s.anomalias||"").trim()!==""));
+}
+function pdfMetaTxt(p){
+  return "Código de control: "+(p.control||"—")+(p.rectificado?" · Rectificado ×"+p.rectificado+" · Última rectificación: "+fmtFechaHora(p.ultRectificacion):"")+(p.entregado?" · Entregado a la empresa: "+fmtFechaHora(p.entregado):"")+" · N.º registro DGP: 4627";
+}
+function pdfSecciones(p){
+  var secs=[];
+  var novFilas=[]; var nNov=Math.max((p.lineas||[]).length,12);
+  for(var j=0;j<nNov;j++){var l=(p.lineas||[])[j]||{};novFilas.push([l.hora||"",l.texto||""]);}
+  secs.push({titulo:null,headers:["Hora","NOVEDADES"],cols:[{w:24,a:"c"},{w:166,a:"l"}],filas:novFilas});
+  if((p.comunicaciones||[]).length){
+    secs.push({titulo:"COMUNICACIONES REALIZADAS",headers:["Hora","Destinatario","Contenido"],cols:[{w:24,a:"c"},{w:35,a:"l"},{w:131,a:"l"}],filas:(p.comunicaciones||[]).map(function(c){return [c.hora||"",c.destino||"",c.texto||""]})});
+  }
+  if((p.material||[]).length){
+    secs.push({titulo:"ARMAS, LLAVES Y MATERIAL",headers:null,cols:[{w:24,a:"c"},{w:166,a:"l"}],filas:(p.material||[]).map(function(m){return [m.hora||"",m.texto||""]})});
+  }
+  if(pdfHaySis(p)){
+    secs.push({titulo:"COMPROBACIÓN DE SISTEMAS",headers:null,cols:[{w:190,a:"l"}],filas:[[pdfSisTxt(p)]]});
+  }
+  var medLines=(p.medidas||"").split("\n"); var nMed=Math.max(medLines.length,5); var medFilas=[];
+  for(var k=0;k<nMed;k++)medFilas.push([medLines[k]||""]);
+  secs.push({titulo:"MEDIDAS ADOPTADAS / OBSERVACIONES",headers:null,cols:[{w:190,a:"l"}],filas:medFilas});
+  return secs;
+}
+function pdfAltosCab(doc,p,fs,s){
+  var izqVals=[p.fecha,p.turno,((p.horaIni||"")+((p.horaIni&&p.horaFin)?" - ":"")+(p.horaFin||"")),p.contrato,p.cliente,p.dependencia];
+  var altos=[];
+  for(var i=0;i<6;i++){
+    var hL=pdfAltoFila(doc,[izqVals[i]],[31],fs,s);
+    var hR=7*s;
+    if(i>=1&&i<=4){var nm=(p.vigilantes||[])[i-1]||"",tp=(p.tips||[])[i-1]||"";hR=pdfAltoFila(doc,[nm,tp],[88,11],fs,s);}
+    altos.push(Math.max(hL,hR));
+  }
+  return altos;
+}
+function pdfMedir(doc,p){
+  var H=0;
+  H+=20+4+8+2;
+  if(p.estado==="anulado"){ H+=pdfAltoFila(doc,["PARTE ANULADO · "+fmtFechaHora(p.anuladoFecha)+" · Motivo: "+(p.anuladoMotivo||"")],[182],9,1)+2; }
+  var cabA=pdfAltosCab(doc,p,9,1); var cabH=0; cabA.forEach(function(h){cabH+=h});
+  H+=cabH+2;
+  var secs=pdfSecciones(p);
+  secs.forEach(function(sec){
+    if(sec.titulo) H+=7;
+    if(sec.headers) H+=7;
+    var anchos=sec.cols.map(function(c){return c.w-4});
+    sec.filas.forEach(function(f){ H+=pdfAltoFila(doc,f,anchos,9,1); });
+  });
+  H+=2+21;
+  var metaL=pdfLineas(doc,pdfMetaTxt(p),186,8).length;
+  H+=Math.max(5,metaL*4+1)+2;
+  return H;
+}
+function pdfBloque(doc,lines,x,yTop,h,fs,lh){
+  var n=lines.length;
+  var yb=yTop+(h-(n-1)*lh)/2+0.247*fs;
+  for(var k=0;k<n;k++) doc.text(lines[k],x,yb+k*lh);
+}
+function pdfDibujar(doc,p,s){
+  var AZ=[0,59,117],AM=[255,249,168],GR=[68,68,68],RJ=[185,28,28];
+  var fs=9*s, lh=4.5*s;
+  var x0=10, W=190;
+  var y=10;
+  doc.setDrawColor(AZ[0],AZ[1],AZ[2]);
+  var lw=20*s;
+  try{var lg=pdfLogoURL(); if(lg) doc.addImage(lg,"PNG",12,12,lw,lw);}catch(e){}
+  doc.setFont("helvetica","bold"); doc.setFontSize(11*s); doc.setTextColor(0,0,0);
+  var numTxt="N.º "+(p.numero||"");
+  doc.text(numTxt,198,12+5*s,{align:"right"});
+  var tw=doc.getTextWidth(numTxt);
+  doc.setDrawColor(0,0,0); doc.setLineWidth(0.3); doc.line(198-tw,12+6.5*s,198,12+6.5*s);
+  doc.setDrawColor(AZ[0],AZ[1],AZ[2]);
+  y=12+lw+4*s;
+  doc.setFont("helvetica","bold"); doc.setFontSize(16*s); doc.setTextColor(AZ[0],AZ[1],AZ[2]);
+  doc.text("PARTE DE NOVEDADES",105,y+5*s,{align:"center"});
+  doc.setTextColor(0,0,0);
+  y+=8*s+2*s;
+  if(p.estado==="anulado"){
+    var aTxt="PARTE ANULADO · "+fmtFechaHora(p.anuladoFecha)+" · Motivo: "+(p.anuladoMotivo||"");
+    var aL=pdfLineas(doc,aTxt,182,fs);
+    var aH=pdfAltoFila(doc,[aTxt],[182],fs,s);
+    doc.setDrawColor(RJ[0],RJ[1],RJ[2]); doc.setLineWidth(0.6); doc.rect(x0,y,W,aH);
+    doc.setFont("helvetica","bold"); doc.setFontSize(fs); doc.setTextColor(RJ[0],RJ[1],RJ[2]);
+    pdfBloque(doc,aL,x0+4,y,aH,fs,lh);
+    doc.setTextColor(0,0,0); doc.setDrawColor(AZ[0],AZ[1],AZ[2]); doc.setLineWidth(0.3);
+    y+=aH+2*s;
+  }
+  var izqLabs=["Fecha","Turno","Horario","Contrato","Cliente","Dependencia"];
+  var izqVals=[p.fecha,p.turno,((p.horaIni||"")+((p.horaIni&&p.horaFin)?" - ":"")+(p.horaFin||"")),p.contrato,p.cliente,p.dependencia];
+  var cabA=pdfAltosCab(doc,p,fs,s);
+  var cabY=y, cabH=0; cabA.forEach(function(h){cabH+=h});
+  doc.setFillColor(AM[0],AM[1],AM[2]); doc.setDrawColor(AZ[0],AZ[1],AZ[2]); doc.setLineWidth(0.3);
+  var yy=cabY;
+  for(var i=0;i<6;i++){
+    var hh=cabA[i];
+    doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(x0,yy,59,hh,"FD");
+    doc.line(x0+24,yy,x0+24,yy+hh);
+    doc.setFont("helvetica","normal"); doc.setFontSize(fs); doc.setTextColor(0,0,0);
+    doc.text(izqLabs[i],x0+2,yy+hh/2+0.247*fs);
+    pdfBloque(doc,pdfLineas(doc,izqVals[i]||"",31,fs),x0+26,yy,hh,fs,lh);
+    yy+=hh;
+  }
+  yy=cabY;
+  doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(72,yy,128,cabA[0],"FD");
+  doc.setFont("helvetica","bold"); doc.setFontSize(fs);
+  doc.text("Nombre y Apellidos Vigilantes de Seguridad",72+64,yy+cabA[0]/2+0.247*fs,{align:"center"});
+  yy+=cabA[0];
+  for(var i2=1;i2<=4;i2++){
+    var hh2=cabA[i2];
+    doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(72,yy,128,hh2,"FD");
+    doc.line(80,yy,80,yy+hh2); doc.line(174,yy,174,yy+hh2); doc.line(185,yy,185,yy+hh2);
+    doc.setFont("helvetica","normal"); doc.setFontSize(fs);
+    doc.text("D.",74,yy+hh2/2+0.247*fs);
+    var nm=(p.vigilantes||[])[i2-1]||"", tp=(p.tips||[])[i2-1]||"";
+    pdfBloque(doc,pdfLineas(doc,nm,88,fs),82,yy,hh2,fs,lh);
+    doc.text("TIP",176,yy+hh2/2+0.247*fs);
+    pdfBloque(doc,pdfLineas(doc,tp,11,fs),187,yy,hh2,fs,lh);
+    yy+=hh2;
+  }
+  doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(72,yy,128,cabA[5],"FD");
+  y=cabY+cabH+2*s;
+  var secs=pdfSecciones(p);
+  secs.forEach(function(sec){
+    if(sec.titulo){
+      var th=7*s;
+      doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(x0,y,W,th,"FD");
+      doc.setFont("helvetica","bold"); doc.setFontSize(fs); doc.setTextColor(0,0,0);
+      doc.text(sec.titulo,105,y+th/2+0.247*fs,{align:"center"});
+      y+=th;
+    }
+    if(sec.headers){
+      var hh3=7*s;
+      var xx=x0;
+      doc.setFillColor(AM[0],AM[1],AM[2]);
+      sec.cols.forEach(function(c,ci){
+        doc.setFillColor(AM[0],AM[1],AM[2]); doc.rect(xx,y,c.w,hh3,"FD");
+        doc.setFont("helvetica","bold"); doc.setFontSize(fs);
+        doc.text(sec.headers[ci],xx+c.w/2,y+hh3/2+0.247*fs,{align:"center"});
+        xx+=c.w;
+      });
+      y+=hh3;
+    }
+    sec.filas.forEach(function(f){
+      var anchos=sec.cols.map(function(c){return c.w-4*s});
+      var rh=pdfAltoFila(doc,f,anchos,fs,s);
+      var xx2=x0;
+      doc.setFillColor(255,255,255);
+      sec.cols.forEach(function(c,ci){
+        doc.setFillColor(255,255,255); doc.rect(xx2,y,c.w,rh,"FD");
+        doc.setFont("helvetica","normal"); doc.setFontSize(fs);
+        var ls=pdfLineas(doc,f[ci]||"",anchos[ci],fs);
+        if(c.a==="c"){
+          var n2=ls.length; var yb2=y+(rh-(n2-1)*lh)/2+0.247*fs;
+          for(var k2=0;k2<n2;k2++) doc.text(ls[k2],xx2+c.w/2,yb2+k2*lh,{align:"center"});
+        } else {
+          pdfBloque(doc,ls,xx2+2,y,rh,fs,lh);
+        }
+        xx2+=c.w;
+      });
+      y+=rh;
+    });
+  });
+  y+=2*s;
+  var colW=W/3;
+  var firmas=[["vig","Fdo. VIGILANTE"],["cli","Fdo. CLIENTE"],["jefe","Fdo. JEFE DE SERVICIOS"]];
+  var sg=p.sig||{}, sf=p.sigFecha||{};
+  var imgH=12*s;
+  firmas.forEach(function(fm,fi){
+    var cx=x0+colW*fi+colW/2;
+    var data=sg[fm[0]];
+    if(data){
+      try{
+        var pr=doc.getImageProperties(data);
+        var wI=imgH*pr.width/pr.height; var hI=imgH;
+        if(wI>55){wI=55;hI=wI*pr.height/pr.width;}
+        doc.addImage(data,"PNG",cx-wI/2,y+imgH-hI,wI,hI);
+      }catch(e){}
+    }
+    doc.setFont("helvetica","bold"); doc.setFontSize(fs); doc.setTextColor(0,0,0);
+    doc.text(fm[1],cx,y+imgH+4.5*s,{align:"center"});
+    if(sf[fm[0]]){
+      doc.setFont("helvetica","normal"); doc.setFontSize(7*s); doc.setTextColor(GR[0],GR[1],GR[2]);
+      doc.text("Firmado: "+fmtFechaHora(sf[fm[0]]),cx,y+imgH+8.5*s,{align:"center"});
+      doc.setTextColor(0,0,0);
+    }
+  });
+  y+=21*s;
+  var metaL=pdfLineas(doc,pdfMetaTxt(p),186,8*s);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8*s); doc.setTextColor(GR[0],GR[1],GR[2]);
+  var metaH=Math.max(5*s,metaL.length*4*s+1*s);
+  pdfBloque(doc,metaL,12,y,metaH,8*s,4*s);
+  doc.setTextColor(0,0,0);
+  y+=metaH;
+  doc.setDrawColor(AZ[0],AZ[1],AZ[2]); doc.setLineWidth(0.6);
+  doc.rect(8,8,194,y-6);
+  var pie="Kosmos Seguridad Sur S.L. · Tel. 900 877 305 · seguridadkosmos.es · Empresa de seguridad inscrita en el Registro de Empresas de Seguridad de la Dirección General de la Policía con el n.º 4627 · C/ Pablo Iglesias 1, Torremolinos (Málaga)";
+  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(AZ[0],AZ[1],AZ[2]);
+  var pieL=pdfLineas(doc,pie,194,7);
+  var py=y+4;
+  pieL.forEach(function(L,li){ doc.text(L,8,py+li*3.5); });
+  doc.setTextColor(0,0,0);
+}
+function pdfCompartir(doc,nombre){
+  var blob=doc.output("blob");
+  var file=null;
+  try{file=new File([blob],nombre,{type:"application/pdf"})}catch(e){file=null}
+  if(navigator.share && file && (!navigator.canShare || navigator.canShare({files:[file]}))){
+    navigator.share({files:[file],title:nombre}).catch(function(){});
+  } else {
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=nombre; document.body.appendChild(a); a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href); a.remove();},500);
+  }
+}
+function pdfNombre(base,fecha,num){
+  var n=String(num||"").replace(/[^A-Za-z0-9._-]+/g,"");
+  return base+"-"+(fecha||hoy())+(n?"-"+n:"")+".pdf";
+}
+function pdfGenerar(lista,nombre){
+  if(!pdfTieneLib()){ return false; }
+  var doc=new window.jspdf.jsPDF({unit:"mm",format:"a4",orientation:"portrait"});
+  for(var i=0;i<lista.length;i++){
+    if(i>0) doc.addPage();
+    var H=pdfMedir(doc,lista[i]);
+    var s=Math.min(1,265/H);
+    pdfDibujar(doc,lista[i],s);
+  }
+  pdfCompartir(doc,nombre);
+  return true;
+}
+function guardarPDFActual(){
+  var p=leerForm();
+  if(!pdfGenerar([p],pdfNombre("Parte-Kosmos",p.fecha,p.numero))) imprimirActual();
+}
+function guardarPDFParte(id){
+  var p=partes.find(function(x){return x.id===id}); if(!p)return;
+  if(!pdfGenerar([p],pdfNombre("Parte-Kosmos",p.fecha,p.numero))) imprimirParte(id);
+}
+function guardarPDFMes(){
+  var y=calFecha.getFullYear(), m=calFecha.getMonth();
+  var prefijo=y+"-"+String(m+1).padStart(2,"0");
+  var delMes=partes.filter(function(p){return (p.fecha||"").indexOf(prefijo)===0}).sort(function(a,b){return (a.fecha<b.fecha)?-1:(a.fecha>b.fecha)?1:0});
+  if(!delMes.length){toast("No hay partes en este mes");return}
+  if(!pdfGenerar(delMes,"Partes-Kosmos-"+prefijo+".pdf")) imprimirMes();
 }
 
 function imprimirParte(id){ var p=partes.find(function(x){return x.id===id}); if(!p)return; document.getElementById("print-area").innerHTML='<div class="p-salto">'+htmlImpresion(p)+'</div>'; imprimir(); }
@@ -506,7 +772,7 @@ function calDia(iso){
  if(delDia.length>1){
    var h='<div class="card"><h2>Partes del '+esc(iso)+'</h2>';
    delDia.forEach(function(p){
-     h+='<div class="card parte-card"><b>'+esc(p.cliente||"Sin cliente")+'</b>'+(p.estado==="anulado"?'<span class="badge anulado">ANULADO</span>':"")+'<div class="mini">'+esc(p.dependencia||"")+' · '+esc(p.turno||"")+(p.numero?' · N.º '+esc(p.numero):"")+' · '+p.lineas.length+' líneas</div><div class="acciones"><button onclick="abrir(\''+p.id+'\')">Abrir / Editar</button><button onclick="imprimirParte(\''+p.id+'\')">Imprimir / PDF</button></div></div>';
+     h+='<div class="card parte-card"><b>'+esc(p.cliente||"Sin cliente")+'</b>'+(p.estado==="anulado"?'<span class="badge anulado">ANULADO</span>':"")+'<div class="mini">'+esc(p.dependencia||"")+' · '+esc(p.turno||"")+(p.numero?' · N.º '+esc(p.numero):"")+' · '+p.lineas.length+' líneas</div><div class="acciones"><button onclick="abrir(\''+p.id+'\')">Abrir / Editar</button><button onclick="guardarPDFParte(\''+p.id+'\')">PDF</button></div></div>';
    });
    document.getElementById("cal-dia").innerHTML=h+'</div>';
    return;
