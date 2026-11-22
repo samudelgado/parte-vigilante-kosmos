@@ -1,5 +1,7 @@
 # Parte Vigilante · Kosmos
 
+Versión 8: el parte diario se puede compartir por WhatsApp (botón «Compartir por WhatsApp» en el formulario y «WhatsApp» en cada parte guardado). Comparte el PDF del parte: en iPhone se elige WhatsApp y el grupo en el selector del sistema; en Android va por el puente de la app. Al compartir, el parte queda marcado como entregado, igual que al enviarlo a la empresa. Sin números ni grupos fijos.
+
 App web para hacer el parte diario del vigilante desde el móvil, sin instalar nada. Para Kosmos Seguridad y Vigilancia.
 
 - Datos del servicio: número, fecha, turno, cliente y dependencia.
