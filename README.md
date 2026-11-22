@@ -1,4 +1,4 @@
-# Parte Vigilante · Kosmos
+Versión 9: el pie del PDF (código de control + empresa) va abajo del todo, fuera del rectángulo, sin tocar la línea; y todas las horas son editables como texto libre (HH:MM) en el parte, las novedades, las comunicaciones y el material.
 
 Versión 8: el parte diario se puede compartir por WhatsApp (botón «Compartir por WhatsApp» en el formulario y «WhatsApp» en cada parte guardado). Comparte el PDF del parte: en iPhone se elige WhatsApp y el grupo en el selector del sistema; en Android va por el puente de la app. Al compartir, el parte queda marcado como entregado, igual que al enviarlo a la empresa. Sin números ni grupos fijos.
 
